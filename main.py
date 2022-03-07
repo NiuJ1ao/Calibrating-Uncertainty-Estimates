@@ -24,7 +24,7 @@ def save_model(path, model):
 def args_parser():
     parser = argparse.ArgumentParser(description='')
     parser.add_argument("--data-path", type=str, default="/data/users/yn621/cifar-10", help="The root path to data directory")
-    parser.add_argument("--dataset", type=str, default="cifar10", choices=["cifar10", "svhn"], help="")
+    parser.add_argument("--dataset", type=str, default="cifar-10", choices=["cifar-10", "SVHN"], help="")
     
     parser.add_argument("--seed", type=int, default=42, help="")
     parser.add_argument("--cuda-device", type=int, default=0, help="")
@@ -114,10 +114,8 @@ def train(args, model, data_loaders, criterion, optimizer):
     logger.info('Best val Acc: {:4f}'.format(best_acc))
 
     # save best model weights
-    torch.save(best_model, f"models/resnet_{dataset}_{seed}_{best_epoch}_{best_acc}.pt")
+    torch.save(best_model, f"/data/users/yn621/models/ISO/resnet_{dataset}_{seed}_{best_epoch}_{best_acc}.pt")
     
-    # with open(f"outputs/resnet_{dataset}_{seed}_{best_epoch}_{best_acc}.txt", mode='w') as f:
-    #     f.write(",".join(val_acc_history))
     logger.info(f"{val_acc_history}")
 
 def init_weights(m):
@@ -132,9 +130,9 @@ def main():
     
     set_all_seeds(args.seed)
     
-    if args.dataset == "cifar10":
+    if args.dataset == "cifar-10":
         data_loaders = get_CIFAR10(args.data_path, args.batch_size)
-    elif args.dataset == "svhn":
+    elif args.dataset == "SVHN":
         data_loaders = get_SVHN(args.data_path, args.batch_size)
     else:
         raise FileNotFoundError
