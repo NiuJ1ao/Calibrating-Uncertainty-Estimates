@@ -1,48 +1,24 @@
-import argparse
 import copy
+import os
 import time
+
 import torch
-import logger as logging
-from logger import logger
 import torch.nn
 from torch.optim import SGD
-from data_loader import get_CIFAR10, get_SVHN
 from torchvision import models
-import random
-import numpy as np
 
-def set_all_seeds(seed):
-  random.seed(seed)
-  np.random.seed(seed)
-  torch.manual_seed(seed)
-  torch.cuda.manual_seed(seed)
-  torch.backends.cudnn.deterministic = True
+import logger as logging
+from data_loader import get_CIFAR10, get_SVHN
+from logger import logger
+from util import args_parser, set_all_seeds
+
 
 def save_model(path, model):
     torch.save(model, path)
 
-def args_parser():
-    parser = argparse.ArgumentParser(description='')
-    parser.add_argument("--data-path", type=str, default="/data/users/yn621/cifar-10", help="The root path to data directory")
-    parser.add_argument("--dataset", type=str, default="cifar-10", choices=["cifar-10", "SVHN"], help="")
-    
-    parser.add_argument("--seed", type=int, default=42, help="")
-    parser.add_argument("--cuda-device", type=int, default=0, help="")
-    
-    parser.add_argument("--batch-size", type=int, default=256, help="")
-    parser.add_argument("--num-epochs", type=int, default=1000, help="")
-    parser.add_argument("--lr", type=float, default=0.1, help="")
-    parser.add_argument("--momentum", type=float, default=0.9, help="")
-    parser.add_argument("--weight-decay", type=float, default=0.0001, help="")
-    parser.add_argument("--eval-step", type=int, default=1, help="")
-
-    return parser.parse_args()
-
 def train(args, model, data_loaders, criterion, optimizer):
     num_epochs = args.num_epochs
-    dataset = args.dataset
     eval_step = args.eval_step
-    seed = args.seed
     
     since = time.time()
     device = torch.device(f"cuda:{args.cuda_device}" if torch.cuda.is_available() else "cpu")
@@ -105,18 +81,17 @@ def train(args, model, data_loaders, criterion, optimizer):
                 best_epoch = epoch
                 best_model = copy.deepcopy(model.state_dict())
             if phase == 'test':
-                val_acc_history.append(epoch_acc)
+                val_acc_history.append(epoch_acc.item())
 
         logger.info(f"{val_acc_history}")
 
     time_elapsed = time.time() - since
     logger.info('Training complete in {:.0f}m {:.0f}s'.format(time_elapsed // 60, time_elapsed % 60))
-    logger.info('Best val Acc: {:4f}'.format(best_acc))
+    logger.info('Best test acc: {:4f}'.format(best_acc))
 
     # save best model weights
-    torch.save(best_model, f"/data/users/yn621/models/ISO/resnet_{dataset}_{seed}_{best_epoch}_{best_acc}.pt")
-    
-    logger.info(f"{val_acc_history}")
+    path = os.path.join(args.model_dir, f"resnet_{args.dataset}_{args.seed}_{best_epoch}_{best_acc:.4f}.pt")
+    torch.save(best_model, path)
 
 def init_weights(m):
     if isinstance(m, torch.nn.Linear):
@@ -137,7 +112,7 @@ def main():
     else:
         raise FileNotFoundError
     
-    model = models.resnet101(pretrained=False, progress=True) 
+    model = models.resnet101() 
     model.apply(init_weights)
     
     optimizer = SGD(model.parameters(), lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay) 
