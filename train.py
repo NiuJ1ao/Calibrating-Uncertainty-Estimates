@@ -37,7 +37,7 @@ def train(args, model, data_loaders, criterion, optimizer):
         logger.info('-' * 30)
 
         # Each epoch has a training and validation phase
-        for phase in ['train', 'test']:
+        for phase in ['train', 'val']:
             if phase == 'train':
                 model.train()  # Set model to training mode
             else:
@@ -76,18 +76,18 @@ def train(args, model, data_loaders, criterion, optimizer):
             logger.info('{} Loss: {:.4f} Acc: {:.4f}'.format(phase, epoch_loss, epoch_acc))
 
             # deep copy the model
-            if phase == 'test' and epoch_acc > best_acc:
+            if phase == 'val' and epoch_acc > best_acc:
                 best_acc = epoch_acc
                 best_epoch = epoch
                 best_model = copy.deepcopy(model.state_dict())
-            if phase == 'test':
+            if phase == 'val':
                 val_acc_history.append(epoch_acc.item())
 
         logger.info(f"{val_acc_history}")
 
     time_elapsed = time.time() - since
     logger.info('Training complete in {:.0f}m {:.0f}s'.format(time_elapsed // 60, time_elapsed % 60))
-    logger.info('Best test acc: {:4f}'.format(best_acc))
+    logger.info('Best val acc: {:4f}'.format(best_acc))
 
     # save best model weights
     path = os.path.join(args.model_dir, f"resnet_{args.dataset}_{args.seed}_{best_epoch}_{best_acc:.4f}.pt")
@@ -112,7 +112,7 @@ def main():
     else:
         raise FileNotFoundError
     
-    model = models.resnet101() 
+    model = models.resnet101(num_classes=10) 
     model.apply(init_weights)
     
     optimizer = SGD(model.parameters(), lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay) 

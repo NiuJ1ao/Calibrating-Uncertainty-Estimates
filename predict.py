@@ -13,10 +13,10 @@ from util import args_parser, set_all_seeds
 
 def load_model(path, device):
     logger.info(f"Loading model from {path}")
-    # model = models.resnet101()
-    # model.load_state_dict(torch.load(path, map_location=device))
-    model = PlattCalibration(models.resnet101())
+    model = models.resnet101(num_classes=10)
     model.load_state_dict(torch.load(path, map_location=device))
+    # model = PlattCalibration(models.resnet101())
+    # model.load_state_dict(torch.load(path, map_location=device))
     model = model.to(device)
     model.eval()
     return model
@@ -55,7 +55,7 @@ def main():
     data_loader = data_loaders["test"]
     
     probabilities = []
-    path = os.path.join(args.model_dir, f"resnet-platt_{args.dataset}_*.pt")
+    path = os.path.join(args.model_dir, f"resnet_{args.dataset}_*.pt")
     for filepath in glob.iglob(path):
         device = torch.device(f"cuda:{args.cuda_device}" if torch.cuda.is_available() else "cpu")
         model = load_model(filepath, device)
@@ -79,7 +79,7 @@ def main():
     ece = expected_calibration_error(predictions=predictions, references=references, confidences=confidences)
     logger.info(f"ECE = {ece}")
     
-    output_dir = f"outputs/resnet-platt_{args.dataset}_{ece:.4f}"
+    output_dir = f"outputs/resnet_{args.dataset}_{ece:.4f}"
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
     torch.save(predictions, f"{output_dir}/predictions.pt")
