@@ -1,8 +1,13 @@
 #!/bin/bash
 
+model="resnet"
+calibrate="temp"
 dataset="cifar-10"
-data_path="/data/users/yn621/${dataset}"
-model_dir="/data/users/yn621/models/ISO"
-device=3
+data_path="/mnt/e/data/${dataset}"
+model_dir="/mnt/e/models/iso_models"
+device=0
 
-python predict.py --cuda-device $device --dataset $dataset --data-path $data_path
+python predict.py \
+--model $model --model-dir $model_dir --cuda-device $device \
+--dataset $dataset --data-path $data_path \
+--calibrate $calibrate
