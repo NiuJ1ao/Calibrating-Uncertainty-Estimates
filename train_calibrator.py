@@ -108,22 +108,19 @@ def train(args, model, data_loaders, criterion, optimizer, device):
     torch.save(best_model, path)
 '''
 
-def train(args, model, data_loaders):
-    model.fit(data_loaders["val"])
+def train(args, model, device):
+    model.fit("val", args.data_path, args.seed)
     
-    _, predictions, confidences, references = model.predict(data_loaders["test"])
+    _, predictions, confidences, references = model.predict("val", args.data_path, args.seed)
     
-    ece = expected_calibration_error(predictions=predictions, references=references, confidences=confidences)
+    ece = expected_calibration_error(predictions, confidences, references, device)
     logger.info(f"ECE = {ece:.4f}")
     
-    acc = accuracy(predictions=predictions, references=references)
+    acc = accuracy(predictions, references)
     logger.info(f"ACC = {acc:.4f}")
     
-    path = os.path.join(args.model_dir, f"{args.model}-{args.calibrate}_{args.dataset}_{args.seed}-{ece:.4f}-{acc:.4f}")
+    path = os.path.join(args.model_dir, f"{args.model}-{args.calibrate}_{args.dataset}_{args.seed}_{ece:.4f}_{acc:.4f}.pt")
     model.dump_model(path)
-    
-    # output_dir = f"outputs/{args.model}-{args.calibrate}_{args.dataset}_{ece:.4f}"
-    # save_outputs(output_dir, predictions, confidences, references)
 
 def main():
     logging.init_logger(log_level=logging.DEBUG)
@@ -131,35 +128,18 @@ def main():
     logger.info(args)
     
     set_all_seeds(args.seed)
-    
-    if args.dataset == "cifar-10":
-        data_loaders = get_CIFAR10(args.data_path, args.batch_size)
-    elif args.dataset == "SVHN":
-        data_loaders = get_SVHN(args.data_path, args.batch_size)
-    else:
-        raise FileNotFoundError
 
     device = torch.device(f"cuda:{args.cuda_device}" if torch.cuda.is_available() else "cpu")
     logger.info(f"{device} is available")
     
-    path = os.path.join(args.model_dir, f"{args.model}_{args.dataset}_{args.seed}_*.pt")
-    for filepath in glob.iglob(path):
-        logger.info("Loading model from {}".format(filepath))
-        
-        classifier = models.resnet101(num_classes=10)
-        classifier.load_state_dict(torch.load(filepath, map_location=device))
-        
-        logger.info(f"{classifier}")
-        
-        # model = classifier
-        if args.calibrate == "platt":
-            model = PlattCalibration(classifier, device)
-        elif args.calibrate == "temp":
-            model = TemperatureCalibration(classifier, device)
-        else:
-            raise NotImplementedError
-        
-        train(args, model, data_loaders)
+    if args.calibrate == "platt":
+        model = PlattCalibration(device=device)
+    elif args.calibrate == "temp":
+        model = TemperatureCalibration(device=device)
+    else:
+        raise NotImplementedError
+    
+    train(args, model, device)
     
 if __name__ == "__main__":
     main()

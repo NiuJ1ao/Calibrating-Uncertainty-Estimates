@@ -1,8 +1,8 @@
 #!/bin/bash
 
 model="resnet"
-calibrate="temp"
-dataset="cifar-10"
+calibrate="platt"
+dataset="SVHN"
 data_path="/mnt/e/data/${dataset}"
 model_dir="/mnt/e/models/iso_models"
 device=0
