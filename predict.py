@@ -7,7 +7,7 @@ from torchvision import models
 from calibration_models import PlattCalibration, TemperatureCalibration
 
 import logger as logging
-from calibration_metrics import expected_calibration_error, accuracy, multiclass_ece
+from calibration_metrics import expected_calibration_error, accuracy, maximum_calibration_error
 from data_loader import get_CIFAR10, get_SVHN
 from logger import logger
 from util import args_parser, save_outputs, set_all_seeds
@@ -62,30 +62,30 @@ def main():
     device = torch.device(f"cuda:{args.cuda_device}" if torch.cuda.is_available() else "cpu")
     calibration = args.calibrate
     
-    if calibration == None: 
+    if calibration == None:    
+        if args.dataset == "cifar-10":
+            data_loaders = get_CIFAR10(args.data_path, args.batch_size)
+        elif args.dataset == "SVHN":
+            data_loaders = get_SVHN(args.data_path, args.batch_size)
+        else:
+            raise FileNotFoundError
+        data_loader = data_loaders["test"]
+        
         probabilities = []
         model_name = f"{args.model}"
-        paths = os.path.join(args.model_dir, f"{model_name}_{args.dataset}_*.pt")
+        paths = os.path.join(args.model_dir, model_name, f"{model_name}_{args.dataset}_*.pt")
         for path in glob.iglob(paths):
             model = load_model(path, device, calibration)
-            
-            if args.dataset == "cifar-10":
-                data_loaders = get_CIFAR10(args.data_path, args.batch_size)
-            elif args.dataset == "SVHN":
-                data_loaders = get_SVHN(args.data_path, args.batch_size)
-            else:
-                raise FileNotFoundError
-            data_loader = data_loaders["test"]
             
             probs, references = uncali_predict(model, data_loader, device)
             probs = probs.softmax(dim=-1)
             probabilities.append(probs.unsqueeze(0))
     else: 
         model_name = f"{args.model}-{calibration}"
-        paths = os.path.join(args.model_dir, f"{model_name}_{args.dataset}_*.pt")
+        paths = os.path.join(args.model_dir, model_name, f"{model_name}_{args.dataset}_*.pt")
         probabilities = []
         for path in glob.iglob(paths):
-            seed = path.split("_")[-3]
+            seed = path.split("_")[-4]
             model = load_model(path, device, calibration)
             probs, _, _, references = model.predict("test", args.data_path, seed)
             probabilities.append(probs.unsqueeze(0))
@@ -95,22 +95,19 @@ def main():
 
     # take mean of all models
     probs_mean = probabilities.mean(dim=0)
-    probs_std = probabilities.std(dim=0)
-    
-    confidences, predictions = torch.max(probs_mean, dim=1)
-     
-    predictions = predictions.cpu()
-    confidences = confidences.cpu()
-    references = references.cpu()
+    confidences, predictions = torch.max(probs_mean, dim=-1)
     
     # ECE
-    ece = expected_calibration_error(predictions=predictions, references=references, confidences=confidences)
+    ece = expected_calibration_error(predictions, confidences, references, device)
     logger.info(f"ECE = {ece}")
     
-    acc = accuracy(predictions=predictions, references=references)
+    mce = maximum_calibration_error(predictions, confidences, references, device)
+    logger.info(f"MCE = {mce}")
+    
+    acc = accuracy(predictions, references, device)
     logger.info(f"ACC = {acc}")
     
-    output_dir = f"outputs/{model_name}_{args.dataset}_{ece:.4f}"
+    output_dir = f"outputs/{model_name}_{args.dataset}_{acc:.4f}_{ece:.4f}_{mce:.4f}"
     save_outputs(output_dir, predictions, confidences, references)
 
 if __name__ == "__main__":

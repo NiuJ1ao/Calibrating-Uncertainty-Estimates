@@ -10,4 +10,4 @@ device=0
 python predict.py \
 --model $model --model-dir $model_dir --cuda-device $device \
 --dataset $dataset --data-path $data_path \
---calibrate $calibrate
+# --calibrate $calibrate

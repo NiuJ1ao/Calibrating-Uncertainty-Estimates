@@ -90,7 +90,10 @@ def train(args, model, data_loaders, criterion, optimizer):
     logger.info('Best val acc: {:4f}'.format(best_acc))
 
     # save best model weights
-    path = os.path.join(args.model_dir, f"resnet_{args.dataset}_{args.seed}_{best_epoch}_{best_acc:.4f}.pt")
+    output_dir = os.path.join(args.model_dir, args.model)
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+    path = os.path.join(output_dir, f"{args.model}_{args.dataset}_{args.seed}_{best_epoch}_{best_acc:.4f}.pt")
     torch.save(best_model, path)
 
 def init_weights(m):

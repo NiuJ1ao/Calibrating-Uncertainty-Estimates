@@ -1,4 +1,5 @@
 import copy
+import glob
 import os
 import time
 import numpy as np
@@ -9,7 +10,7 @@ from torch.optim import SGD, Adam
 import logger as logging
 from data_loader import get_SOLAR, get_UCI
 from logger import logger
-from regressor import MLP, QuantileLoss, QuantileMLP
+from regressor import MLP, LogLikeliLoss, MLPSigma, QuantileLoss, QuantileMLP
 from util import args_parser, set_all_seeds, UCI
 from tqdm import tqdm
 
@@ -101,12 +102,29 @@ def init_weights(m):
     if isinstance(m, torch.nn.Linear):
         torch.nn.init.xavier_uniform(m.weight)
         m.bias.data.fill_(0.01)
-        
-def log_gaussian_loss(output, target, sigma, no_dim):
-    exponent = -0.5*(target - output)**2/sigma**2
-    log_coeff = -no_dim*torch.log(sigma) - 0.5*no_dim*np.log(2*np.pi)
+
+def generate_variance_targets(args, data_loader):
+    device = torch.device(f"cuda:{args.cuda_device}" if torch.cuda.is_available() else "cpu")
+    paths = os.path.join(args.model_dir, "mlp", f"mlp_{args.dataset}_{args.seed}_*")
+    model_path = glob.glob(paths)[0]
     
-    return - (log_coeff + exponent).sum()
+    # load model
+    in_dim = data_loader[0].shape[1]
+    model = MLP(input_dim=in_dim, output_dim=1, num_units=args.hidden_size, drop_prob=args.dropout)
+    model.load_state_dict(torch.load(model_path, map_location=device))
+    model = model.to(device)
+    model.eval()
+    
+    inputs = data_loader[0].to(device)
+    labels = data_loader[1].to(device)
+    with torch.no_grad():
+        outputs = model(inputs)
+    
+        assert outputs.size() == labels.size()
+        targets = (outputs - labels) ** 2
+        
+    return targets.detach()
+    
 
 def main():
     logging.init_logger(log_level=logging.INFO)
@@ -125,7 +143,16 @@ def main():
     in_dim = data_loaders['train'][0].shape[1]
     if args.model == "mlp":
         model = MLP(input_dim=in_dim, output_dim=1, num_units=args.hidden_size, drop_prob=args.dropout)
-        loss_fn = torch.nn.L1Loss()
+        loss_fn = LogLikeliLoss()
+        
+    elif args.model == "mlp-sigma":
+        model = MLPSigma(input_dim=in_dim, output_dim=1, num_units=args.hidden_size, drop_prob=args.dropout)
+        loss_fn = torch.nn.MSELoss()
+        
+        for data in data_loaders:
+            new_y = generate_variance_targets(args, data_loaders[data])
+            data_loaders[data] = (data_loaders[data][0], new_y)
+        
     elif args.model == "quantile":
         quantiles = [0.05, 0.5, 0.95]
         model = QuantileMLP(input_dim=in_dim, output_dim=1, num_units=args.hidden_size, drop_prob=args.dropout, quantiles=quantiles)

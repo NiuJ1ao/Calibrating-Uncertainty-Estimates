@@ -18,6 +18,7 @@ def get_CIFAR10(path, batch_size):
     test_ds = datasets.CIFAR10(path, train=False, transform=transform, download=True)
     
     train_ds, val_ds = random_split(train_ds, [40000, 10000])
+    # val_ds, test_ds = random_split(test_ds, [3000, 7000])
     
     train_data_loader = initialise_data_loader(train_ds, batch_size, shuffle=True)
     val_data_loader = initialise_data_loader(val_ds, batch_size)
@@ -178,8 +179,10 @@ def initialise_data_loader(data, batch_size, n_threads=0, shuffle=False) -> Data
     
 if __name__ == "__main__":
     set_all_seeds(0)
-    get_UCI_housing("/mnt/e/data")
-    get_UCI("/mnt/e/data/house")
+    # get_UCI_housing("/mnt/e/data")
+    # get_UCI("/mnt/e/data/house")
+    
+    get_SOLAR("/mnt/e/data/solar")
     
     # train_X, train_y = data["train"]
     # train = np.hstack((train_X, train_y.reshape(-1,1)))

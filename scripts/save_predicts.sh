@@ -2,11 +2,15 @@
 
 date="$(date +'%d-%m-%Y')"
 mkdir -p "log/$date"
+
 seeds=(864 394 776 911 430)
 devices=(0 0 0 0 0)
+# seeds=(864)
+# devices=(0)
+
 model="resnet"
 model_dir="/mnt/e/models/iso_models/"
-dataset="SVHN"
+dataset="cifar-10"
 data_path="/mnt/e/data/${dataset}"
 
 for i in "${!seeds[@]}"; do
@@ -17,3 +21,8 @@ for i in "${!seeds[@]}"; do
     --model $model --model-dir $model_dir \
     --dataset $dataset --data-path $data_path
 done
+
+# python save_predicts.py \
+# --cuda-device 0 --ensemble \
+# --model $model --model-dir $model_dir \
+# --dataset $dataset --data-path $data_path

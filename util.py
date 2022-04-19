@@ -14,6 +14,7 @@ def args_parser():
                         help="")
     parser.add_argument("--model-dir", type=str, default="/data/users/yn621/models/ISO")
     parser.add_argument("--model", type=str, default="resnet", help="")
+    parser.add_argument("--ensemble", action="store_true", help="")
     parser.add_argument("--calibrate", type=str, default=None, choices=[None, "platt", "temp"], help="")
     
     parser.add_argument("--seed", type=int, default=42, help="")
@@ -41,6 +42,11 @@ def set_all_seeds(seed):
 def save_outputs(output_dir, predictions, confidences, references):
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
+    
+    predictions = predictions.cpu()
+    confidences = confidences.cpu()
+    references = references.cpu()
+        
     torch.save(predictions, f"{output_dir}/predictions.pt")
     torch.save(confidences, f"{output_dir}/confidences.pt")
     torch.save(references, f"{output_dir}/references.pt")

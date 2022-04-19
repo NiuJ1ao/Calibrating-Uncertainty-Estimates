@@ -1,16 +1,15 @@
 import os
 import torch
-import pickle
+import copy
 from torch import nn
-from calibration_metrics import expected_calibration_error
+from calibration_metrics import expected_calibration_error, maximum_calibration_error
 from logger import logger
-from sklearn.linear_model import LogisticRegression
 
 class AbstractCalibration(nn.Module):
-    def __init__(self, device="cpu"):
+    def __init__(self, is_ensembled=False, device="cpu"):
         super(AbstractCalibration, self).__init__()
         self.device = device
-        self.calibrator = None
+        self.is_ensembled = is_ensembled
         self.best_model = None
     
     def load_uncalibrated_logits(self, dataset, data_dir, seed):
@@ -22,18 +21,28 @@ class AbstractCalibration(nn.Module):
         path = os.path.join(data_dir, f"{dataset}_labels_{seed}.pt")
         return torch.load(path, map_location=self.device)
     
+    def load_data(self, dataset, data_dir, seed):
+        if self.is_ensembled:
+            logits = self.load_uncalibrated_logits(dataset, data_dir, "ensembled")
+            labels = self.load_labels(dataset, data_dir, "ensembled")
+        else:
+            logits = self.load_uncalibrated_logits(dataset, data_dir, seed)
+            labels = self.load_labels(dataset, data_dir, seed)
+        return logits, labels
+    
     def train_val_split(self, logits, labels):
         data_size = len(labels)
-        val_size = int(len(logits)*0.1)
+        val_size = int(len(logits)*0.3)
         permutation = torch.randperm(data_size, device=self.device)
-        train_indices = permutation[:val_size]
-        val_indices = permutation[val_size:]
-        logger.debug(f"{train_indices.shape}, {val_indices.shape}")
+        val_indices = permutation[:val_size]
+        train_indices = permutation[val_size:]
         
         train_logits = torch.index_select(logits, dim=0, index=train_indices)
         train_labels = torch.index_select(labels, dim=0, index=train_indices)
         val_logits = torch.index_select(logits, dim=0, index=val_indices)
         val_labels = torch.index_select(labels, dim=0, index=val_indices)
+        
+        logger.debug(f"{train_labels.shape}, {val_labels.shape}")
 
         return train_logits, train_labels, val_logits, val_labels
     
@@ -48,70 +57,70 @@ class AbstractCalibration(nn.Module):
     
     
 class TemperatureCalibration(AbstractCalibration):
-    def __init__(self, calibrator=None, device="cpu"):
-        super().__init__(device)
-        if calibrator == None:
-            # self.temperature = torch.rand(1, requires_grad=True, device=device)
-            self.temperature = torch.tensor(1.5, requires_grad=True, device=device)
-            logger.debug(f"initial temperature: {self.temperature}")
+    def __init__(self, is_ensembled=False, temperature=None, device="cpu"):
+        super().__init__(is_ensembled, device)
+        if temperature == None:
+            self.temperature = torch.tensor(1., requires_grad=True, device=device)
+            # self.temperature = torch.tensor(1.5, requires_grad=True, device=device)
         else:
-            self.temperature = torch.load(calibrator, map_location=device)
-        self.activation = nn.Softplus()
+            self.temperature = torch.load(temperature, map_location=device)
+        logger.debug(f"initial temperature: {self.temperature}")
+        
         self.softmax = nn.Softmax(dim=-1)
         
         self.criterion = nn.CrossEntropyLoss()
         self.optimizer = torch.optim.Adam([self.temperature], lr=0.01)
         
     def temperature_scale(self, logits):
-        temp = self.activation(self.temperature)
-        temp = temp + torch.tensor(1e-9, requires_grad=False, device=self.device)
-        return self.softmax(logits / temp)
+        return self.softmax(logits / torch.exp(self.temperature))
     
     def fit(self, dataset, data_dir, seed):
-        logits = self.load_uncalibrated_logits(dataset, data_dir, seed)
-        labels = self.load_labels(dataset, data_dir, seed)
-        
+        logits, labels = self.load_data(dataset, data_dir, seed)
         train_logits, train_labels, val_logits, val_labels = self.train_val_split(logits, labels)
         
-        best_ece = 1
+        best_ece, best_mce = 1, 1
         best_acc = 0
-        for epoch in range(200):
+        for epoch in range(100):
             self.optimizer.zero_grad()
             outputs = self.temperature_scale(train_logits)
             loss = self.criterion(outputs, train_labels)
             loss.backward()
             self.optimizer.step()
+            # logger.debug(f"epoch {epoch}: {self.temperature}")
             
             with torch.no_grad():
                 outputs = self.temperature_scale(val_logits)
                 loss = self.criterion(outputs, val_labels)
-                confs, preds = torch.max(outputs, 1)
+                confs, preds = torch.max(outputs, dim=-1)
                 corrects = torch.sum(preds == val_labels)
                 
-            epoch_loss = loss / len(labels)
-            epoch_acc = corrects.double() / len(labels)
+            epoch_loss = loss / len(val_labels)
+            epoch_acc = corrects.double() / len(val_labels)
             epoch_ece = expected_calibration_error(preds, confs, val_labels, self.device)
+            epoch_mce = maximum_calibration_error(preds, confs, val_labels, self.device)
             
             if epoch % 10 == 0:
-                logger.info('Epoch {} Val - Loss: {} Acc: {:.4f} ECE: {:.4f}'.format(epoch, epoch_loss, epoch_acc, epoch_ece))
+                logger.info('Epoch {} Val - Loss: {} Acc: {:.4f} ECE: {:.4f} MCE: {:.4f}'.format(epoch, epoch_loss, epoch_acc, epoch_ece, epoch_mce))
                 
             if epoch_ece < best_ece:
                 best_ece = epoch_ece
+                best_mce = epoch_mce
                 best_acc = epoch_acc
-                self.best_model = self.temperature.detach()
+                logger.debug(f"better temperature: {self.temperature}")
+                self.best_model = copy.deepcopy(self.temperature)
         
-        logger.info('Best val acc: {:4f}, Best val ece: {:4f}'.format(best_acc, best_ece))
+        logger.info('Best val acc: {:4f}, Best val ece: {:4f}, Best val mce: {:4f}'.format(best_acc, best_ece, best_mce))
             
     def predict(self, dataset, data_dir, seed):
-        logits = self.load_uncalibrated_logits(dataset, data_dir, seed)
-        labels = self.load_labels(dataset, data_dir, seed)
+        logits, labels = self.load_data(dataset, data_dir, seed)
         
         if self.best_model != None:
             self.temperature = self.best_model
         
+        logger.debug(f"Final temperature: {self.temperature}")
+        
         with torch.no_grad():
-            calibrated_logits = self.temperature_scale(logits)
-            probabilities = self.softmax(calibrated_logits)
+            probabilities = self.temperature_scale(logits)
             confidences, predictions = torch.max(probabilities, dim=-1)
         
         return probabilities, predictions, confidences, labels
@@ -121,8 +130,8 @@ class TemperatureCalibration(AbstractCalibration):
         
 
 class PlattCalibration(AbstractCalibration):
-    def __init__(self, calibrator=None, device="cpu"):
-        super().__init__(device)
+    def __init__(self, is_ensembled=False, calibrator=None, device="cpu"):
+        super().__init__(is_ensembled, device)
         # self.calibrator = LogisticRegression(penalty="none", solver='lbfgs', multi_class='multinomial')
         self.calibrator = nn.Sequential(
             nn.Linear(in_features=10, out_features=10, bias=True, device=self.device),
@@ -137,12 +146,10 @@ class PlattCalibration(AbstractCalibration):
         self.optimizer = torch.optim.Adam(self.calibrator.parameters(), lr=0.01)
         
     def fit(self, dataset, data_dir, seed):
-        logits = self.load_uncalibrated_logits(dataset, data_dir, seed)
-        labels = self.load_labels(dataset, data_dir, seed)
-        
+        logits, labels = self.load_data(dataset, data_dir, seed)    
         train_logits, train_labels, val_logits, val_labels = self.train_val_split(logits, labels)
         
-        best_ece = 1
+        best_ece, best_mce = 1, 1
         best_acc = 0
         for epoch in range(100):
             self.optimizer.zero_grad()
@@ -154,26 +161,27 @@ class PlattCalibration(AbstractCalibration):
             with torch.no_grad():
                 outputs = self.calibrator(val_logits)
                 loss = self.criterion(outputs, val_labels)
-                confs, preds = torch.max(outputs, 1)
+                confs, preds = torch.max(outputs, dim=-1)
                 corrects = torch.sum(preds == val_labels)
                 
-            epoch_loss = loss / len(labels)
-            epoch_acc = corrects.double() / len(labels)
+            epoch_loss = loss / len(val_labels)
+            epoch_acc = corrects.double() / len(val_labels)
             epoch_ece = expected_calibration_error(preds, confs, val_labels, self.device)
+            epoch_mce = maximum_calibration_error(preds, confs, val_labels, self.device)
             
             if epoch % 10 == 0:
-                logger.info('Epoch {} Val - Loss: {} Acc: {:.4f} ECE: {:.4f}'.format(epoch, epoch_loss, epoch_acc, epoch_ece))
+                logger.info('Epoch {} Val - Loss: {} Acc: {:.4f} ECE: {:.4f} MCE: {:.4f}'.format(epoch, epoch_loss, epoch_acc, epoch_ece, epoch_mce))
                 
             if epoch_ece < best_ece:
                 best_ece = epoch_ece
+                best_mce = epoch_mce
                 best_acc = epoch_acc
-                self.best_model = self.calibrator.state_dict()
+                self.best_model = copy.deepcopy(self.calibrator.state_dict())
         
-        logger.info('Best val acc: {:4f}, Best val ece: {:4f}'.format(best_acc, best_ece))
+        logger.info('Best val acc: {:4f}, Best val ece: {:4f}, Best val mce: {:4f}'.format(best_acc, best_ece, best_mce))
         
     def predict(self, dataset, data_dir, seed):
-        logits = self.load_uncalibrated_logits(dataset, data_dir, seed)
-        labels = self.load_labels(dataset, data_dir, seed)
+        logits, labels = self.load_data(dataset, data_dir, seed)
         
         if self.best_model != None:
             self.calibrator.load_state_dict(self.best_model)
