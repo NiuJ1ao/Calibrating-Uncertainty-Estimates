@@ -16,7 +16,7 @@ logger.info(args)
 set_all_seeds(args.seed)
 
 device = torch.device(f"cuda:{args.cuda_device}" if torch.cuda.is_available() else "cpu")
-dataset = "test"
+dataset = "val"
 if args.dataset == "cifar-10":
     data_loaders = get_CIFAR10(args.data_path, args.batch_size)
 elif args.dataset == "SVHN":

@@ -10,7 +10,7 @@ from torch.optim import SGD, Adam
 import logger as logging
 from data_loader import get_SOLAR, get_UCI
 from logger import logger
-from regressor import MLP, LogLikeliLoss, MLPSigma, QuantileLoss, QuantileMLP
+from regressor import MLP, GaussianNLLLossWrapper, QuantileLoss, QuantileMLP
 from util import args_parser, set_all_seeds, UCI
 from tqdm import tqdm
 
@@ -143,15 +143,15 @@ def main():
     in_dim = data_loaders['train'][0].shape[1]
     if args.model == "mlp":
         model = MLP(input_dim=in_dim, output_dim=1, num_units=args.hidden_size, drop_prob=args.dropout)
-        loss_fn = LogLikeliLoss()
+        loss_fn = GaussianNLLLossWrapper()
         
-    elif args.model == "mlp-sigma":
-        model = MLPSigma(input_dim=in_dim, output_dim=1, num_units=args.hidden_size, drop_prob=args.dropout)
-        loss_fn = torch.nn.MSELoss()
+    # elif args.model == "mlp-sigma":
+    #     model = MLPSigma(input_dim=in_dim, output_dim=1, num_units=args.hidden_size, drop_prob=args.dropout)
+    #     loss_fn = torch.nn.MSELoss()
         
-        for data in data_loaders:
-            new_y = generate_variance_targets(args, data_loaders[data])
-            data_loaders[data] = (data_loaders[data][0], new_y)
+    #     for data in data_loaders:
+    #         new_y = generate_variance_targets(args, data_loaders[data])
+    #         data_loaders[data] = (data_loaders[data][0], new_y)
         
     elif args.model == "quantile":
         quantiles = [0.05, 0.5, 0.95]

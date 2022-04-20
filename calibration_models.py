@@ -151,7 +151,7 @@ class PlattCalibration(AbstractCalibration):
         
         best_ece, best_mce = 1, 1
         best_acc = 0
-        for epoch in range(100):
+        for epoch in range(250):
             self.optimizer.zero_grad()
             outputs = self.calibrator(train_logits)
             loss = self.criterion(outputs, train_labels)

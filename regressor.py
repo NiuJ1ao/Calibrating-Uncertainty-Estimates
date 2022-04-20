@@ -13,17 +13,29 @@ class MLP(nn.Module):
             nn.Linear(num_units, num_units),
             nn.ReLU(inplace = True),
             nn.Dropout(p = drop_prob),
-            
-            nn.Linear(num_units, output_dim * 2)
+        )
+        
+        self.mu = nn.Sequential(
+            nn.Linear(num_units, num_units),
+            nn.ReLU(inplace = True),
+            nn.Dropout(p = drop_prob),
+            nn.Linear(num_units, output_dim)
+        )
+        self.log_sigma2 = nn.Sequential(
+            nn.Linear(num_units, num_units),
+            nn.ReLU(inplace = True),
+            nn.Dropout(p = drop_prob),
+            nn.Linear(num_units, output_dim)
         )
 
     def forward(self, x):
-        return self.layers(x)
+        logits = self.layers(x)
+        return self.mu(logits), self.log_sigma2(logits)
     
-class MLPSigma(MLP):
-    def forward(self, x):
-        logits = super(MLPSigma, self).forward(x)
-        return nn.functional.softplus(logits)
+# class MLPSigma(MLP):
+#     def forward(self, x):
+#         logits = super(MLPSigma, self).forward(x)
+#         return nn.functional.softplus(logits)
     
 class QuantileMLP(nn.Module):
     def __init__(self, input_dim, output_dim, num_units, drop_prob, quantiles):
@@ -48,25 +60,16 @@ class QuantileMLP(nn.Module):
     def forward(self, x):
         return self.layers(x)
 
-class LogLikeliLoss(nn.Module):
+class GaussianNLLLossWrapper(nn.Module):
     def __init__(self):
-        super(LogLikeliLoss, self).__init__()
+        super(GaussianNLLLossWrapper, self).__init__()
+        self.loss = nn.GaussianNLLLoss()
     
     def forward(self, y_pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
-        n = y_pred.size(0)
+        mu = y_pred[0]
+        sigma_squared = torch.exp(y_pred[1])
         
-        mean = y_pred[:, 0].view(target.size())
-        sigma_squared = torch.exp(y_pred[:, 1].view(target.size()))
-        # print(sigma_squared[:10])
-        
-        # assert not torch.any(torch.isnan(torch.log(2 * torch.pi * sigma_squared))), torch.log(2 * torch.pi * sigma_squared)
-        # assert not torch.any(torch.isnan((mean - target) ** 2 / sigma_squared))
-        
-        loss = -0.5 * (n * torch.log(2 * torch.pi * sigma_squared) + (mean - target) ** 2 / sigma_squared)
-        
-        assert not torch.any(torch.isnan(loss)), sigma_squared
-        
-        return loss.mean()
+        return self.loss(mu, target, sigma_squared)
 
 class QuantileLoss(nn.Module):
     def __init__(self, quantiles=[0.05, 0.5, 0.95]):
