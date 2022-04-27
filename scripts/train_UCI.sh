@@ -6,12 +6,20 @@ devices=(0 0 0 0 0)
 # seeds=(864)
 # devices=(0)
 
+# model="mlp"
+# model_dir="/mnt/e/models/iso_models"
+# epochs=1000
+# lr=0.01
+# dropout=0.01
+# hid_size=200
+
 model="quantile"
 model_dir="/mnt/e/models/iso_models"
 epochs=1000
 lr=0.01
 dropout=0.01
-hid_size=20
+hid_size=200
+
 # dataset="house"
 date="$(date +'%d-%m-%Y')"
 mkdir -p "log/$date"

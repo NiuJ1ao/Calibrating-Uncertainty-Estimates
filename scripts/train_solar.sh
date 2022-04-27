@@ -5,14 +5,23 @@ devices=(0 0 0 0 0)
 # seeds=(864)
 # devices=(0)
 
-model="mlp"
+# model="mlp"
+# model_dir="/mnt/e/models/iso_models"
+# dataset="solar"
+# data_path="/mnt/e/data/${dataset}"
+# epochs=5000
+# lr=0.001
+# dropout=0.01
+# hid_size=40
+
+model="quantile"
 model_dir="/mnt/e/models/iso_models"
 dataset="solar"
 data_path="/mnt/e/data/${dataset}"
 epochs=5000
 lr=0.001
 dropout=0.01
-hid_size=40
+hid_size=40 # 20
 
 date="$(date +'%d-%m-%Y')"
 mkdir -p "log/$date"

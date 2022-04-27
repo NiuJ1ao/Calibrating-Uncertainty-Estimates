@@ -10,19 +10,19 @@ devices=(0 0 0 0 0)
 
 model="resnet"
 model_dir="/mnt/e/models/iso_models/"
-dataset="SVHN"
+dataset="cifar-10"
 data_path="/mnt/e/data/${dataset}"
 
-# for i in "${!seeds[@]}"; do
-#     echo "seeds=${seeds[i]}, device=${devices[i]}"
+for i in "${!seeds[@]}"; do
+    echo "seeds=${seeds[i]}, device=${devices[i]}"
 
-#     python save_predicts.py \
-#     --seed ${seeds[i]} --cuda-device ${devices[i]} \
-#     --model $model --model-dir $model_dir \
-#     --dataset $dataset --data-path $data_path
-# done
+    python save_predicts.py \
+    --seed ${seeds[i]} --cuda-device ${devices[i]} \
+    --model $model --model-dir $model_dir \
+    --dataset $dataset --data-path $data_path
+done
 
-python save_predicts.py \
---cuda-device 0 --ensemble \
---model $model --model-dir $model_dir \
---dataset $dataset --data-path $data_path
+# python save_predicts.py \
+# --cuda-device 0 --ensemble \
+# --model $model --model-dir $model_dir \
+# --dataset $dataset --data-path $data_path

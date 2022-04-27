@@ -98,11 +98,7 @@ def train(args, model, data_loaders, criterion, optimizer):
     path = os.path.join(args.model_dir, args.model, f"{args.model}_{args.dataset}_{args.seed}_{best_epoch}_{test_loss:.4f}.pt")
     torch.save(best_model, path)
 
-def init_weights(m):
-    if isinstance(m, torch.nn.Linear):
-        torch.nn.init.xavier_uniform(m.weight)
-        m.bias.data.fill_(0.01)
-
+'''
 def generate_variance_targets(args, data_loader):
     device = torch.device(f"cuda:{args.cuda_device}" if torch.cuda.is_available() else "cpu")
     paths = os.path.join(args.model_dir, "mlp", f"mlp_{args.dataset}_{args.seed}_*")
@@ -124,7 +120,7 @@ def generate_variance_targets(args, data_loader):
         targets = (outputs - labels) ** 2
         
     return targets.detach()
-    
+'''  
 
 def main():
     logging.init_logger(log_level=logging.INFO)
@@ -144,19 +140,10 @@ def main():
     if args.model == "mlp":
         model = MLP(input_dim=in_dim, output_dim=1, num_units=args.hidden_size, drop_prob=args.dropout)
         loss_fn = GaussianNLLLossWrapper()
-        
-    # elif args.model == "mlp-sigma":
-    #     model = MLPSigma(input_dim=in_dim, output_dim=1, num_units=args.hidden_size, drop_prob=args.dropout)
-    #     loss_fn = torch.nn.MSELoss()
-        
-    #     for data in data_loaders:
-    #         new_y = generate_variance_targets(args, data_loaders[data])
-    #         data_loaders[data] = (data_loaders[data][0], new_y)
-        
     elif args.model == "quantile":
-        quantiles = [0.05, 0.5, 0.95]
-        model = QuantileMLP(input_dim=in_dim, output_dim=1, num_units=args.hidden_size, drop_prob=args.dropout, quantiles=quantiles)
-        loss_fn = QuantileLoss(quantiles)
+        alpha = 0.1
+        model = QuantileMLP(input_dim=in_dim, output_dim=1, num_units=args.hidden_size, drop_prob=args.dropout)
+        loss_fn = QuantileLoss(alpha)
     logger.info(model)
     
     data_len = len(data_loaders['train'][0])

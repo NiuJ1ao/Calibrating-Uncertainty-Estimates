@@ -43,15 +43,16 @@ def get_SVHN(path, batch_size):
     return {"train": train_data_loader, "val": val_data_loader, "test": test_data_loader}
 
 def get_SOLAR(path):
-    train_path = os.path.join(path, "solar_data_train.npy")
-    train_data = np.load(train_path) # (261, 2)
-    val_path = os.path.join(path, "solar_data_val.npy")
-    val_data = np.load(val_path) # (30, 2)
+    train_path = os.path.join(path, "train.npy")
+    train_data = np.load(train_path) # (203, 2)
+    val_path = os.path.join(path, "val.npy")
+    val_data = np.load(val_path) # (88, 2)
     test_path = os.path.join(path, "solar_data_test.npy")
     test_data = np.load(test_path) # (100, 2)
     
     train_X, train_y = train_data[:, 0], train_data[:, 1]
     val_X, val_y = val_data[:, 0], val_data[:, 1]
+    # train_X, val_X, train_y, val_y = train_test_split(train_data[:,0], train_data[:,1], test_size=0.3)
     test_X, test_y = test_data[:, 0], test_data[:, 1]
         
     train_X, train_y = numpy2torch(train_X, train_y)
@@ -123,8 +124,8 @@ def get_UCI_yacht(path):
     return train_val_test_split(data)
 
 def train_val_test_split(data):
-    train_X, test_X, train_y, test_y = train_test_split(data[:,:-2], data[:,-1], test_size=0.1)
-    train_X, val_X, train_y, val_y = train_test_split(train_X, train_y, test_size=0.1)
+    train_X, test_X, train_y, test_y = train_test_split(data[:,:-2], data[:,-1], test_size=0.3)
+    train_X, val_X, train_y, val_y = train_test_split(train_X, train_y, test_size=0.3)
     
     train_X, train_y = normalise_data(train_X, train_y)
     val_X, val_y = normalise_data(val_X, val_y)
@@ -180,19 +181,21 @@ def initialise_data_loader(data, batch_size, n_threads=0, shuffle=False) -> Data
 if __name__ == "__main__":
     set_all_seeds(0)
     # get_UCI_housing("/mnt/e/data")
-    # get_UCI("/mnt/e/data/house")
     
-    get_SOLAR("/mnt/e/data/solar")
     
-    # train_X, train_y = data["train"]
-    # train = np.hstack((train_X, train_y.reshape(-1,1)))
-    # print(train.shape)
-    # np.save("/mnt/e/data/yacht/train.npy", train)
+    data = get_SOLAR("/mnt/e/data/solar")
+    # data = get_UCI_housing("/mnt/e/data")
     
-    # val_X, val_y = data["val"]
-    # val = np.hstack((val_X, val_y.reshape(-1,1)))
-    # np.save("/mnt/e/data/yacht/val.npy", val)
+    name = "solar"
+    train_X, train_y = data["train"]
+    train = np.hstack((train_X, train_y.reshape(-1,1)))
+    print(train.shape)
+    np.save(f"/mnt/e/data/{name}/train.npy", train)
     
-    # test_X, test_y = data["test"]
-    # test = np.hstack((test_X, test_y.reshape(-1,1)))
-    # np.save("/mnt/e/data/yacht/test.npy", test)
+    val_X, val_y = data["val"]
+    val = np.hstack((val_X, val_y.reshape(-1,1)))
+    np.save(f"/mnt/e/data/{name}/val.npy", val)
+    
+    test_X, test_y = data["test"]
+    test = np.hstack((test_X, test_y.reshape(-1,1)))
+    np.save(f"/mnt/e/data/{name}/test.npy", test)

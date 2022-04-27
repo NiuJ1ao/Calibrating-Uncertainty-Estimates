@@ -3,23 +3,25 @@ import os
 
 import torch
 from torchvision import models
-from calibration_metrics import accuracy
+from calibration_metrics import accuracy, expected_calibration_error, maximum_calibration_error
 
 import logger as logging
 from data_loader import get_CIFAR10, get_SVHN
 from logger import logger
-from util import args_parser, set_all_seeds
+from util import args_parser, save_outputs, set_all_seeds
 
 logging.init_logger(log_level=logging.DEBUG)
 args = args_parser()
 logger.info(args)
-set_all_seeds(args.seed)
 
 device = torch.device(f"cuda:{args.cuda_device}" if torch.cuda.is_available() else "cpu")
-dataset = "val"
+dataset = "test"
 if args.dataset == "cifar-10":
+    set_all_seeds(42)
     data_loaders = get_CIFAR10(args.data_path, args.batch_size)
+    set_all_seeds(args.seed)
 elif args.dataset == "SVHN":
+    set_all_seeds(args.seed)
     data_loaders = get_SVHN(args.data_path, args.batch_size)
 else:
     raise FileNotFoundError
@@ -73,8 +75,6 @@ if args.ensemble:
     acc = accuracy(preds, labels)
     logger.info(f"Acc of ensembled classifiers: {acc:.4f}")
 
-    print(all_logits.shape, labels.shape)
-    
     torch.save(all_logits, os.path.join(args.data_path, f"{dataset}_uncalibrated_logits_ensembled.pt"))
     torch.save(labels, os.path.join(args.data_path, f"{dataset}_labels_ensembled.pt"))
     

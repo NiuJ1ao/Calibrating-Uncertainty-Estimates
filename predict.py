@@ -17,7 +17,7 @@ def load_model(path, device, calibration=None):
     if calibration == "platt":
         model = PlattCalibration(calibrator=path, device=device)
     elif calibration == "temp":
-        model = TemperatureCalibration(calibrator=path, device=device)
+        model = TemperatureCalibration(temperature=path, device=device)
     else:
         model = models.resnet101(num_classes=10)
         model.load_state_dict(torch.load(path, map_location=device))
@@ -26,7 +26,7 @@ def load_model(path, device, calibration=None):
 
     return model
 
-def uncali_predict(model, data_loader, device):
+def predict(model, data_loader, device):
     model.eval()
     running_corrects = 0
         
@@ -73,16 +73,22 @@ def main():
         
         probabilities = []
         model_name = f"{args.model}"
-        paths = os.path.join(args.model_dir, model_name, f"{model_name}_{args.dataset}_*.pt")
+        if args.ensemble:
+            paths = os.path.join(args.model_dir, model_name, f"{model_name}_{args.dataset}_*.pt")
+        else:
+            paths = os.path.join(args.model_dir, model_name, f"{model_name}_{args.dataset}_864_*.pt")
         for path in glob.iglob(paths):
             model = load_model(path, device, calibration)
             
-            probs, references = uncali_predict(model, data_loader, device)
-            probs = probs.softmax(dim=-1)
+            logits, references = predict(model, data_loader, device)
+            probs = logits.softmax(dim=-1)
             probabilities.append(probs.unsqueeze(0))
     else: 
         model_name = f"{args.model}-{calibration}"
-        paths = os.path.join(args.model_dir, model_name, f"{model_name}_{args.dataset}_*.pt")
+        if args.ensemble:
+            paths = os.path.join(args.model_dir, model_name, f"{model_name}_{args.dataset}_ensembled_*.pt")
+        else:
+            paths = os.path.join(args.model_dir, model_name, f"{model_name}_{args.dataset}_864_*.pt")
         probabilities = []
         for path in glob.iglob(paths):
             seed = path.split("_")[-4]
@@ -107,7 +113,10 @@ def main():
     acc = accuracy(predictions, references, device)
     logger.info(f"ACC = {acc}")
     
-    output_dir = f"outputs/{model_name}_{args.dataset}_{acc:.4f}_{ece:.4f}_{mce:.4f}"
+    if args.ensemble:
+        output_dir = f"outputs/{model_name}_{args.dataset}_ensembled_{acc:.4f}_{ece:.4f}_{mce:.4f}"
+    else:
+        output_dir = f"outputs/{model_name}_{args.dataset}_{acc:.4f}_{ece:.4f}_{mce:.4f}"
     save_outputs(output_dir, predictions, confidences, references)
 
 if __name__ == "__main__":
